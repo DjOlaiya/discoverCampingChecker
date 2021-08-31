@@ -1,0 +1,10 @@
+{
+    "name": "discoverCamping",
+    "description": "Chrome extension to check for camp site availability in bc!",
+    "version": "1.0",
+    "manifest_version": 3,
+    "background": {
+        "service_worker": "background.js"
+    },
+    "permissions": ["storage","unlimitedStorage","tabs", "scripting","notifications"]
+  }

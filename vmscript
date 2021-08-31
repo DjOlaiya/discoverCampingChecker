@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+
+#generate ssh key and then stores file name in file name
+#will break if there is more than one .pub file.
+# adds key to ssh agent registry
+genSSHKey(){
+    ssh-keygen -t ed25519 -C "$email"
+    cd ~/.ssh/
+    sshpath = "~/.ssh/"
+    pubKey=$(ls  *.pub)
+    pubKeyName=$(basename $pubKey .pub)
+    echo "filename is $pubKeyName"
+    cd ~
+    eval "$(ssh-agent -s)"
+    ssh-add ~/.ssh/$pubKeyName
+}
+
+
+# paste your tokens in the terminal and it's stored as an environment var for future use. 
+# Also stored in gitSecrets.txt
+storeTokens(){
+    if [ ! -f "gitSecrets.txt" ];
+    then
+        echo "would you like to store your github tokens as environment variables? [y/n]";
+        read ans
+        if [ $ans == "y" ] || [ ans == "Y" ];
+        then
+            printf " please enter your $tools personal token\n"
+            read tools_token
+            echo "$tools_token" >> ~/gitSecrets.txt
+            printf "export toolsToken=$tools_token" >> ~/.bashrc
+            printf "\n" >> ~/.bashrc
+            printf 'github.tools token can now be exported using $toolsToken'
+            printf "\nsetting up $tools account\n"
+            initGit $tools
+            echo "please enter your $wdf personal token"
+            read wdf_token
+            echo "$wdf_token" > ~/gitSecrets.txt
+            printf "export wdfToken=$wdf_token" >> ~/.bashrc
+            printf "\n" >> ~/.bashrc
+            printf 'github.wdf token can now be exported using $wdfToken\n'
+            printf "\nsetting up $wdf account\n"
+            initGit $wdf
+        fi
+    fi
+}
+
+
+initGit(){
+    gh auth status &> loggedin.txt
+    toolsAcct=$(grep -om1 'github.*' loggedin.txt)
+    if [[ $1 == $tools ]];
+    	then
+            printf "follow prompts and enter $tools personal access token\n"
+            gh auth login -h $tools
+    elif [[ $1 == $wdf ]] && [[ $toolsAcct ]];
+      	then
+            getCerts
+    	    printf "follow prompts and enter $wdf personal access token\n"
+            gh auth login -h $wdf
+    else
+            printf "unknown\n"
+    fi
+    gh auth status
+    rm loggedin.txt
+}
+
+
+# after logging into git tools, download the certs and move them into local folder
+certBasePath="/usr/local/share/ca-certificates"
+certPath="$certBasePath/sap"
+getCerts(){ 
+    if [ ! -d "docker-grafana-influxdb-jenkins" ];
+        then
+        echo "downloading sap certs"
+        gh repo clone https://github.tools.sap/cf-live-realm/docker-grafana-influxdb-jenkins.git   
+    fi
+    if [ ! -d "$certPath" ];
+	    then    
+	    echo "copying certs over to $certBasePath";
+	    echo "adding write permissions to $certBasePath";
+	    sudo chmod -R a+w $certBasePath && cp -avr docker-grafana-influxdb-jenkins/shared/certs/sap/ $certBasePath
+	    echo "updating ca-certificates";
+	    sudo update-ca-certificates
+        fi
+}
+
+
+export tools=github.tools.sap
+export wdf=github.wdf.sap.corp
+
+
+echo "Setting up your work Env."
+main(){
+sshpath="~/.ssh"
+    if [ ! -f "$sshpath/*.pub" ]
+     then
+         echo "Would you like to generate an ssh key now?[y/n]" 
+         read keyAns
+         if [ $keyAns == "y" ] || [ $keyAns == "Y" ];
+            then
+            echo "what is your email address? "
+            read email
+            genSSHKey
+        fi
+    fi
+    echo "ssh key pair created."
+    echo "Set github.tools and github.wdf personal access tokens."
+    storeTokens
+}
+main
+printf "Ok dev env setup is complete\n"
+
+
+
+
+
+
+
+
+
+
+# -------------------------------------------------------------------
+# sets up git account. calls getCerts if needed 
+setupGit(){
+    gh auth status &> loggedin.txt
+    toolsAcct=$(grep -om1 'github.*' loggedin.txt)
+    wdfAcct=$(grep -om1 'github.wdf.*' loggedin.txt)
+    if [[ $toolsAcct && $wdfAcct ]];
+    	then
+    	    echo "you are logged into both $tools and $wdf"
+    elif [[ $toolsAcct && ! $wdfAcct ]];
+        then
+    	    getCerts
+    	    echo "logging in to $wdf"
+    	    #sed "1q;d" < gitSecrets.txt | gh auth login -h $wdf --with-token
+            gh auth login -h $wdf
+    elif [[ ! $toolsAcct && $wdfAcct ]];
+      	then
+      	    echo "logging into $tools"
+    	    #sed "2q;d" < gitSecrets.txt | gh auth login -h $tools --with-token
+            gh auth login -h $tools
+    else
+        echo "logging into both $tools and $wdf accounts now" 
+        # sed "2q;d" < gitSecrets.txt | gh auth login -h $tools --with-token
+        # sed "1q;d" < gitSecrets.txt | gh auth login -h $wdf --with-token
+        echo "logging into $tools"
+        gh auth login -h $tools
+        echo "logging into $wdf"
+        gh auth login -h $wdf
+    fi
+    gh auth status
+    rm loggedin.txt
+}
+
+
+
+
+
+#secondary function for storing tokens
+exportTokensPermanently(){
+    local toolsToken=$(getTokens "tools")
+    local wdfToken=$(getTokens "wdf")
+    printf "\n" >> ~/.bashrc
+    printf "export toolsToken=$toolsToken" >> ~/.bashrc
+    printf "\n" >> ~/.bashrc
+    printf "export wdfToken=$wdfToken" >> ~/.bashrc
+    printf "\n" >> ~/.bashrc 
+}
+
+
+# takes in wdf or tools and returns the related token
+getTokens(){
+    if [[ $1 == "tools" ]];
+    then
+        echo "$(sed "1q;d" < gitSecrets.txt)"
+    elif [[ $1 == "wdf" ]];
+    then
+        echo "$(sed "2q;d" < gitSecrets.txt)"
+    else
+        printf "unknown token"
+    fi
+}
+#export wdfToken=1331d74167e3745c60dee07ae8e87c7431457329
+#export toolsToken=cb82dbaac95fb51797e1711d571b879abd4e6f9d
