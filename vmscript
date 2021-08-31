@@ -181,5 +181,3 @@ getTokens(){
         printf "unknown token"
     fi
 }
-#export wdfToken=1331d74167e3745c60dee07ae8e87c7431457329
-#export toolsToken=cb82dbaac95fb51797e1711d571b879abd4e6f9d
